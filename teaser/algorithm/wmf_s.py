@@ -76,7 +76,7 @@ class WMF_S(AspectAlgorithm):
         Pu = np.linalg.inv(Dsub.T @ self.DTDinv_ @ Dsub + (1 / self.alpha) * np.identity(len(indices)))
         Pu = self.DTDinv_ - GDT @ Pu @ GDT.T
 
-        Pu = Pu @ (DT.multiply(Cu_diag) @ x[:, np.newaxis])
+        Pu = Pu @ (DT * Cu_diag @ x[:, np.newaxis])
         Pu = Pu.flatten()
 
         return Pu
@@ -86,8 +86,17 @@ class WMF_S(AspectAlgorithm):
         x[history] = 1
         return self._user_vector_x(x)
 
+    # for caching of test set user vectors (speed up simulated experiments)
+    _cached_X: scipy.sparse.csr_matrix
+    _cached_factors: np.ndarray
+
+    def clear_cache(self):
+        del self._cached_X
+        del self._cached_factors
+
     def _user_vectors(self, X):
-        # X = X[:32]
+        if hasattr(self, '_cached_X') and X is self._cached_X:
+            return self._cached_factors.copy()
 
         # start = datetime.now()
         factors = user_vectors(X.data, X.indptr, X.indices, self.DT_, self.alpha, self.DTDinv_)
@@ -97,6 +106,10 @@ class WMF_S(AspectAlgorithm):
         # factors = np.vstack([self._user_vector_x(X[u].toarray().flatten()) for u in tqdm(range(X.shape[0]))])
 
         # assert np.allclose(factors, factors2)
+
+        self._cached_X = X
+        self._cached_factors = factors.copy()
+
         return factors
 
     def predict_all(self, X: scipy.sparse.csr_matrix, retarget: bool = False):

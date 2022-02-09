@@ -63,6 +63,11 @@ class TEASER_S(AspectAlgorithm):
 
         # X = X.copy()
 
+        # Debug
+        # from sklearn.feature_extraction.text import TfidfTransformer
+        # tfidf_trans = TfidfTransformer(norm='l2', sublinear_tf=False)
+        # S = tfidf_trans.fit_transform(S)
+
         m, n = X.shape
         t = S.shape[1]
 
@@ -191,11 +196,14 @@ class TEASER_S(AspectAlgorithm):
         user_vec = np.asarray(self.E_[history].sum(axis=0)).flatten()
         return user_vec
 
-    def certainty(self, history, user_vec):
-        """ Different measure of certainty: how much would user vector change if the average item factor is added. """
-        abs_uv = np.abs(user_vec)
-        certainty = np.average(abs_uv / (abs_uv + np.abs(self.factor_average)))
-        return certainty
+    def _user_vectors(self, X):
+        return X @ self.E_
+
+    # def certainty(self, history, user_vec):
+    #     """ Different measure of certainty: how much would user vector change if the average item factor is added. """
+    #     abs_uv = np.abs(user_vec)
+    #     certainty = np.average(abs_uv / (abs_uv + np.abs(self.factor_average)))
+    #     return certainty
 
     def save(self, path: Path):
         data = {

@@ -48,26 +48,34 @@ class AspectAlgorithm(Algorithm):
     def _user_vector(self, history):
         raise NotImplementedError()
 
+    def _user_vectors(self, X):
+        user_vecs = list()
+        for u in range(X.shape[0]):
+            history = X[u].nonzero()[1]
+            vec = self._user_vector(history)
+            user_vecs.append(vec)
+
+        return np.stack(user_vecs, axis=0)
+
     def certainty(self, history, user_vec):
         """ A score in ]0, 1] to indicate how certain the system is of the user vector. """
         # Default implementation scales certainty from 0.2 to 0.8 for histories between 0 and 3.
         # 0.8 further on
         return min(0.2 + len(history) * 0.2, 0.8)
 
-    def user_vector(self, history, modifications):
+    def _modify(self, user_vec, history, modifications):
         """
-        Compute the user vector based on history of items and given feedback.
+        Modify the user vector based on the given feedback.
 
         modifications is a dictionary (tag -> int) with possible values from -10 to 10.
         Each step represents one press of the plus or minus buttons where 5 times plus would
         bring a tag of score 0 to a represented score of 1 (increments of 0.2).
 
+        :param user_vec: base user vector (computed by model)
         :param history: list of item ids user interacted with
         :param modifications: dictionary of user feedback on tags
         :return: user vector
         """
-        user_vec = self._user_vector(history)
-
         certainty = self.certainty(history, user_vec)
 
         if len(history) == 0:
@@ -93,6 +101,36 @@ class AspectAlgorithm(Algorithm):
             user_vec[tag_index] = min(bound, user_vec[tag_index])
 
         return user_vec
+
+    def user_vector(self, history, modifications):
+        """
+        Compute the user vector based on history of items and given feedback.
+
+        modifications is a dictionary (tag -> int) with possible values from -10 to 10.
+        Each step represents one press of the plus or minus buttons where 5 times plus would
+        bring a tag of score 0 to a represented score of 1 (increments of 0.2).
+
+        :param history: list of item ids user interacted with
+        :param modifications: dictionary of user feedback on tags
+        :return: user vector
+        """
+        user_vec = self._user_vector(history)
+        return self._modify(user_vec, history, modifications)
+
+    def user_vectors(self, X: scipy.sparse.csr_matrix, modifications):
+        """
+        Same as `user_vector`, but for a matrix.
+        """
+        m = X.shape[0]
+        assert len(modifications) == m
+
+        user_vecs = self._user_vectors(X)
+
+        for u in range(m):
+            history = X[u].nonzero()[1]
+            user_vecs[u] = self._modify(user_vecs[u], history, modifications[u])
+
+        return user_vecs
 
     def explain_profile(self, history, modifications=dict()):
         """
@@ -133,6 +171,16 @@ class AspectAlgorithm(Algorithm):
 
         if not retarget:
             scores[history] = -1e10
+
+        return scores
+
+    def predict_all_interactive(self, X: scipy.sparse.csr_matrix, modifications=list(), retarget: bool = False):
+        user_vecs = self.user_vectors(X, modifications)
+
+        scores = np.asarray(user_vecs @ self.DT_)
+
+        if not retarget:
+            scores[X.toarray().astype(bool)] = -1e10
 
         return scores
 
